@@ -1,0 +1,88 @@
+pragma solidity ^0.8.0;
+
+contract WorkerJobMarket {
+
+    // Define Worker Struct
+    struct Worker {
+        address payable workerAddress;
+        string name;
+        string skills;
+        string workHistory;
+        bool available;
+        mapping(uint => bool) appliedJobs; // Track applied jobs (jobId => applied)
+        uint rating; // Average rating (can be extended to store individual ratings)
+    }
+
+    // Define Job Struct
+    struct Job {
+        address payable employerAddress;
+        string title;
+        string description;
+        string location;
+        uint256 pay;
+        mapping(address => bool) applicants; // Track applicants for a job (workerAddress => applied)
+    }
+
+    // Mappings for Workers and Jobs
+    mapping(address => Worker) public workers;
+    mapping(uint => Job) public jobs;
+
+    // Current Job ID
+    uint public currentJobId = 0;
+
+    // Register a new Worker
+    function registerWorker(string memory name, string memory skills, string memory workHistory) public {
+        require(workers[msg.sender].workerAddress == address(0), "Worker already registered");
+
+        workers[msg.sender].workerAddress = payable(msg.sender);
+        workers[msg.sender].name = name;
+        workers[msg.sender].skills = skills;
+        workers[msg.sender].workHistory = workHistory;
+        workers[msg.sender].available = true;
+        workers[msg.sender].rating = 0;
+    }
+
+    // Get Worker details
+    function getWorkerDetails(address workerAddress) public view returns (string memory name, string memory skills, string memory workHistory, bool available, uint rating) {
+        Worker storage worker = workers[workerAddress];
+        return (worker.name, worker.skills, worker.workHistory, worker.available, worker.rating);
+    }
+
+    // Add a new Job
+    function addJob(string memory title, string memory description, string memory location, uint256 pay) public {
+        currentJobId++;
+
+        Job memory newJob = Job({
+            employerAddress: payable(msg.sender),
+            title: title,
+            description: description,
+            location: location,
+            pay: pay,
+            applicants: new mapping(address => bool)
+        });
+        jobs[currentJobId] = newJob;
+    }
+
+    // Get Job details
+    function getJobDetails(uint jobId) public view returns (string memory title, string memory description, string memory location, uint256 pay, address payable employerAddress) {
+        Job storage job = jobs[jobId];
+        return (job.title, job.description, job.location, job.pay, job.employerAddress);
+    }
+
+    // Apply for a Job
+    function applyForJob(uint jobId) public {
+        Job storage job = jobs[jobId];
+        require(job.applicants[msg.sender] == false, "Worker already applied");
+        require(workers[msg.sender].available == true, "Worker is not available");
+
+        job.applicants[msg.sender] = true;
+        workers[msg.sender].appliedJobs[jobId] = true;
+    }
+
+    // Rate a Worker (by employer after job completion)
+    function rateWorker(address workerAddress, uint rating) public {
+        require(jobs[msg.sender].applicants[workerAddress] == true, "Worker did not apply for this job");
+
+        workers[workerAddress].rating = (workers[workerAddress].rating + rating) / 2; // Simple average (can be improved)
+    }
+}
