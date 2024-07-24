@@ -1,88 +1,85 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-contract WorkerJobMarket {
-
-    // Define Worker Struct
-    struct Worker {
-        address payable workerAddress;
+contract JobPortal {
+    
+    address public admin;
+    
+    struct Applicant {
+        uint id;
         string name;
         string skills;
-        string workHistory;
-        bool available;
-        mapping(uint => bool) appliedJobs; // Track applied jobs (jobId => applied)
-        uint rating; // Average rating (can be extended to store individual ratings)
+        string availability;
+        uint rating;
     }
-
-    // Define Job Struct
+    
     struct Job {
-        address payable employerAddress;
+        uint id;
         string title;
         string description;
-        string location;
-        uint256 pay;
-        mapping(address => bool) applicants; // Track applicants for a job (workerAddress => applied)
+        uint salary;
+        address employer;
+        bool filled;
     }
-
-    // Mappings for Workers and Jobs
-    mapping(address => Worker) public workers;
+    
+    mapping(uint => Applicant) public applicants;
+    uint public nextApplicantId;
+    
     mapping(uint => Job) public jobs;
-
-    // Current Job ID
-    uint public currentJobId = 0;
-
-    // Register a new Worker
-    function registerWorker(string memory name, string memory skills, string memory workHistory) public {
-        require(workers[msg.sender].workerAddress == address(0), "Worker already registered");
-
-        workers[msg.sender].workerAddress = payable(msg.sender);
-        workers[msg.sender].name = name;
-        workers[msg.sender].skills = skills;
-        workers[msg.sender].workHistory = workHistory;
-        workers[msg.sender].available = true;
-        workers[msg.sender].rating = 0;
+    uint public nextJobId;
+    
+    mapping(uint => mapping(uint => uint)) public jobApplications; // job id => applicant id => timestamp
+    
+    modifier onlyAdmin() {
+        require(msg.sender == admin, "Only admin can perform this action");
+        _;
     }
-
-    // Get Worker details
-    function getWorkerDetails(address workerAddress) public view returns (string memory name, string memory skills, string memory workHistory, bool available, uint rating) {
-        Worker storage worker = workers[workerAddress];
-        return (worker.name, worker.skills, worker.workHistory, worker.available, worker.rating);
+    
+    constructor() {
+        admin = msg.sender;
+        nextApplicantId = 1;
+        nextJobId = 1;
     }
-
-    // Add a new Job
-    function addJob(string memory title, string memory description, string memory location, uint256 pay) public {
-        currentJobId++;
-
-        Job memory newJob = Job({
-            employerAddress: payable(msg.sender),
-            title: title,
-            description: description,
-            location: location,
-            pay: pay,
-            applicants: new mapping(address => bool)
-        });
-        jobs[currentJobId] = newJob;
+    
+    function addApplicant(string memory _name, string memory _skills, string memory _availability) external onlyAdmin {
+        applicants[nextApplicantId] = Applicant(nextApplicantId, _name, _skills, _availability, 0);
+        nextApplicantId++;
     }
-
-    // Get Job details
-    function getJobDetails(uint jobId) public view returns (string memory title, string memory description, string memory location, uint256 pay, address payable employerAddress) {
-        Job storage job = jobs[jobId];
-        return (job.title, job.description, job.location, job.pay, job.employerAddress);
+    
+    function getApplicant(uint _applicantId) external view returns (uint, string memory, string memory, string memory, uint) {
+        require(_applicantId > 0 && _applicantId < nextApplicantId, "Invalid applicant ID");
+        Applicant memory applicant = applicants[_applicantId];
+        return (applicant.id, applicant.name, applicant.skills, applicant.availability, applicant.rating);
     }
-
-    // Apply for a Job
-    function applyForJob(uint jobId) public {
-        Job storage job = jobs[jobId];
-        require(job.applicants[msg.sender] == false, "Worker already applied");
-        require(workers[msg.sender].available == true, "Worker is not available");
-
-        job.applicants[msg.sender] = true;
-        workers[msg.sender].appliedJobs[jobId] = true;
+    
+    function addJob(string memory _title, string memory _description, uint _salary) external onlyAdmin {
+        jobs[nextJobId] = Job(nextJobId, _title, _description, _salary, msg.sender, false);
+        nextJobId++;
     }
-
-    // Rate a Worker (by employer after job completion)
-    function rateWorker(address workerAddress, uint rating) public {
-        require(jobs[msg.sender].applicants[workerAddress] == true, "Worker did not apply for this job");
-
-        workers[workerAddress].rating = (workers[workerAddress].rating + rating) / 2; // Simple average (can be improved)
+    
+    function getJob(uint _jobId) external view returns (uint, string memory, string memory, uint, address, bool) {
+        require(_jobId > 0 && _jobId < nextJobId, "Invalid job ID");
+        Job memory job = jobs[_jobId];
+        return (job.id, job.title, job.description, job.salary, job.employer, job.filled);
+    }
+    
+    function applyForJob(uint _jobId, uint _applicantId) external {
+        require(_jobId > 0 && _jobId < nextJobId, "Invalid job ID");
+        require(_applicantId > 0 && _applicantId < nextApplicantId, "Invalid applicant ID");
+        require(jobs[_jobId].filled == false, "Job is already filled");
+        
+        jobApplications[_jobId][_applicantId] = block.timestamp;
+    }
+    
+    function rateApplicant(uint _applicantId, uint _rating) external onlyAdmin {
+        require(_applicantId > 0 && _applicantId < nextApplicantId, "Invalid applicant ID");
+        require(_rating >= 1 && _rating <= 5, "Rating must be between 1 and 5");
+        
+        applicants[_applicantId].rating = _rating;
+    }
+    
+    function getApplicantRating(uint _applicantId) external view returns (uint) {
+        require(_applicantId > 0 && _applicantId < nextApplicantId, "Invalid applicant ID");
+        return applicants[_applicantId].rating;
     }
 }
